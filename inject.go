@@ -1,0 +1,214 @@
+package taint // import "resenje.org/taint"
+
+import (
+	"errors"
+	"reflect"
+	"runtime"
+	"strings"
+)
+
+var (
+	DefaultTagKey = "taint"
+)
+
+func Inject(src, dst interface{}) error {
+	return InjectWithTag(src, dst, DefaultTagKey)
+}
+
+func InjectWithTag(src, dst interface{}, tagKey string) error {
+	dstValue := reflect.ValueOf(dst)
+	if dstValue.Kind() != reflect.Ptr || dstValue.IsNil() {
+		return &InvalidInjectError{dstValue.Type()}
+	}
+	return inject(reflect.ValueOf(src), dstValue, tagKey)
+}
+
+func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			switch rt := r.(type) {
+			case runtime.Error:
+				panic(r)
+			case error:
+				err = rt
+			case string:
+				err = errors.New(rt)
+			default:
+				panic(r)
+			}
+		}
+	}()
+
+	dstValue = reflect.Indirect(dstValue)
+	srcValue = reflect.Indirect(reflect.ValueOf(srcValue.Interface()))
+	srcKind := srcValue.Kind()
+	dstKind := dstValue.Kind()
+
+	switch dstKind {
+	case reflect.Slice:
+		dstType := dstValue.Type()
+		dstTypeElem := dstType.Elem()
+		dstTypeElemKind := dstTypeElem.Kind()
+		if srcKind == reflect.Slice {
+			srcLen := srcValue.Len()
+			dstValue.Set(reflect.MakeSlice(dstType, srcLen, srcValue.Cap()))
+			for i := 0; i < srcLen; i++ {
+				if err := inject(srcValue.Index(i), dstValue.Index(i), tagKey); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if dstTypeElemKind == reflect.Interface || srcKind == dstTypeElemKind {
+			dstValue.Set(reflect.MakeSlice(dstType, 1, 1))
+			return inject(srcValue, dstValue.Index(0), tagKey)
+		}
+		return &InvalidTypeError{
+			TypeSrc: srcValue.Type(),
+			TypeDst: dstType,
+		}
+	case reflect.Map:
+		dstType := dstValue.Type()
+		dstTypeElem := dstType.Elem()
+		switch srcKind {
+		case reflect.Map:
+			dstTypeKey := dstType.Key()
+			dstValue.Set(reflect.MakeMap(dstType))
+			for _, srcKey := range srcValue.MapKeys() {
+				dstKeyValue := reflect.New(dstTypeElem)
+				if err := inject(srcValue.MapIndex(srcKey), dstKeyValue, tagKey); err != nil {
+					return err
+				}
+				dstKey := reflect.New(dstTypeKey).Elem()
+				dstKey.Set(reflect.ValueOf(srcKey.Interface()))
+				dstValue.SetMapIndex(dstKey, reflect.Indirect(dstKeyValue))
+			}
+		case reflect.Struct:
+			dstValue.Set(reflect.MakeMap(dstType))
+			for i := 0; i < srcValue.NumField(); i++ {
+				dstKeyValue := reflect.New(dstTypeElem)
+				if err := inject(srcValue.Field(i), dstKeyValue, tagKey); err != nil {
+					return err
+				}
+				srcFieldType := srcValue.Type().Field(i)
+				keyName := keyNameFromTag(srcFieldType.Tag, tagKey)
+				if keyName == "-" {
+					continue
+				}
+				if keyName == "" {
+					keyName = srcFieldType.Name
+				}
+				dstKey := reflect.New(reflect.TypeOf(keyName)).Elem()
+				dstKey.SetString(keyName)
+				dstValue.SetMapIndex(dstKey, reflect.Indirect(dstKeyValue))
+			}
+		default:
+			return &InvalidTypeError{
+				TypeSrc: srcValue.Type(),
+				TypeDst: dstType,
+			}
+		}
+	case reflect.Struct:
+		switch srcKind {
+		case reflect.Map:
+			for i := 0; i < dstValue.NumField(); i++ {
+				dstKeyValue := reflect.New(dstValue.Field(i).Type())
+				dstFieldType := dstValue.Type().Field(i)
+				keyName := keyNameFromTag(dstFieldType.Tag, tagKey)
+				if keyName == "" {
+					keyName = dstFieldType.Name
+				}
+				if keyName == "-" {
+					continue
+				}
+				srcKey := reflect.New(reflect.TypeOf(keyName)).Elem()
+				srcKey.SetString(keyName)
+				srcMapValue := srcValue.MapIndex(srcKey)
+				if !srcMapValue.IsValid() {
+					if tagContains(dstFieldType.Tag, tagKey, "required") {
+						return &FieldRequiredError{
+							FieldName: keyName,
+						}
+					}
+					continue
+				}
+				if err := inject(srcMapValue, dstKeyValue, tagKey); err != nil {
+					return err
+				}
+				dstValue.Field(i).Set(reflect.Indirect(dstKeyValue))
+			}
+		case reflect.Struct:
+			for i := 0; i < dstValue.NumField(); i++ {
+				dstKeyValue := reflect.New(dstValue.Field(i).Type())
+				dstFieldType := dstValue.Type().Field(i)
+				fieldName := dstFieldType.Name
+				srcStructValue := srcValue.FieldByName(fieldName)
+				if !srcStructValue.IsValid() {
+					if tagContains(dstFieldType.Tag, tagKey, "required") {
+						return &FieldRequiredError{
+							FieldName: fieldName,
+						}
+					}
+					continue
+				}
+				if err := inject(srcStructValue, dstKeyValue, tagKey); err != nil {
+					return err
+				}
+				dstValue.Field(i).Set(reflect.Indirect(srcStructValue))
+			}
+		default:
+			return &InvalidTypeError{
+				TypeSrc: srcValue.Type(),
+				TypeDst: dstValue.Type(),
+			}
+		}
+	case reflect.Array:
+		dstTypeElem := dstValue.Type().Elem()
+		if srcValue.Type().Elem().Kind() == dstTypeElem.Kind() {
+			dstValue.Set(srcValue)
+			return
+		}
+		srcLen := srcValue.Len()
+		dstValue.Set(reflect.New(reflect.ArrayOf(srcLen, dstTypeElem)).Elem())
+		for i := 0; i < srcLen; i++ {
+			if err := inject(srcValue.Index(i), dstValue.Index(i), tagKey); err != nil {
+				return err
+			}
+		}
+	default:
+		if dstKind != srcKind && dstKind != reflect.Interface {
+			return &InvalidTypeError{
+				TypeSrc: srcValue.Type(),
+				TypeDst: dstValue.Type(),
+			}
+		}
+		dstValue.Set(srcValue)
+	}
+	return nil
+}
+
+func keyNameFromTag(structTag reflect.StructTag, tagKey string) (keyName string) {
+	if tag := structTag.Get(tagKey); tag != "" {
+		if strings.Contains(tag, ",") {
+			keyName = strings.Split(tag, ",")[0]
+		} else {
+			keyName = tag
+		}
+	}
+	return keyName
+}
+
+func tagContains(structTag reflect.StructTag, tagKey, tagValue string) bool {
+	if tag := structTag.Get(tagKey); tag != "" {
+		l := strings.Split(tag, ",")
+		if len(l) < 2 {
+			return false
+		}
+		for _, e := range l[1:] {
+			if e == tagValue {
+				return true
+			}
+		}
+	}
+	return false
+}
