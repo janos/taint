@@ -5,3 +5,9 @@ go:
 
 install:
   - go get -insecure -v resenje.org/taint
+
+before_script:
+  - go vet -v resenje.org/taint/...
+
+script:
+  - go test -v resenje.org/taint/...
