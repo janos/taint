@@ -4,4 +4,4 @@ go:
   - 1.5
 
 install:
-  - go get resenje.org/taint
+  - go get -v resenje.org/taint
