@@ -243,14 +243,14 @@ type Struct2 struct {
 
 func TestInjectMapOfStruct1s(t *testing.T) {
 	s := map[interface{}]Struct1{
-		"test1": Struct1{
+		"test1": {
 			Test1: "value1",
 			Test2: "value2",
 			Test3: "value3",
 			Test4: 41,
 			Test5: "value5",
 		},
-		"test2": Struct1{
+		"test2": {
 			Test1: "value 1",
 			Test2: "value 2",
 			Test3: "value 3",
@@ -259,7 +259,7 @@ func TestInjectMapOfStruct1s(t *testing.T) {
 		},
 	}
 	expected := map[string]map[string]interface{}{
-		"test1": map[string]interface{}{
+		"test1": {
 			"test-1": "value1",
 			"Test2":  "value2",
 			"test-3": "value3",
@@ -267,7 +267,7 @@ func TestInjectMapOfStruct1s(t *testing.T) {
 			"Test5":  "value5",
 			"Test7":  []struct{}(nil),
 		},
-		"test2": map[string]interface{}{
+		"test2": {
 			"test-1": "value 1",
 			"Test2":  "value 2",
 			"test-3": "value 3",
@@ -313,8 +313,8 @@ func TestInjectStruct1ToStruct2(t *testing.T) {
 		Test2: "value1",
 		Test4: 4,
 		Test7: []struct{}{
-			struct{}{},
-			struct{}{},
+			{},
+			{},
 		},
 	}
 	expected := Struct2{
@@ -322,8 +322,8 @@ func TestInjectStruct1ToStruct2(t *testing.T) {
 		Test2: "value1",
 		Test4: 4,
 		Test7: []struct{}{
-			struct{}{},
-			struct{}{},
+			{},
+			{},
 		},
 	}
 
