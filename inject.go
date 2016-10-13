@@ -1,3 +1,8 @@
+// Copyright (c) 2015, 2016 Janoš Guljaš <janos@resenje.org>
+// All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package taint // import "resenje.org/taint"
 
 import (
@@ -8,13 +13,17 @@ import (
 )
 
 var (
+	// DefaultTagKey is a key for Go struct tags that this module will check.
 	DefaultTagKey = "taint"
 )
 
+// Inject will inject fields of source object into destination object.
 func Inject(src, dst interface{}) error {
 	return InjectWithTag(src, dst, DefaultTagKey)
 }
 
+// InjectWithTag will inject fields of source object into destination object
+// using a custom Go struct tag.
 func InjectWithTag(src, dst interface{}, tagKey string) error {
 	dstValue := reflect.ValueOf(dst)
 	if dstValue.Kind() != reflect.Ptr || dstValue.IsNil() {
