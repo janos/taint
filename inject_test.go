@@ -229,7 +229,7 @@ type Struct1 struct {
 	Test2 string `taint:",required"`
 	Test3 string `taint:"test-3"`
 	Test4 int
-	Test5 string `taint:",test-something,test-soemthing-else"`
+	Test5 string `taint:",test-something,test-something-else"`
 	Test6 string `taint:"-"`
 	Test7 []struct{}
 }
