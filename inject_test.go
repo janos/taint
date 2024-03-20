@@ -336,6 +336,207 @@ func TestInjectStruct1ToStruct2(t *testing.T) {
 	}
 }
 
+func TestInjectStructUnassignableTypeWithSlice(t *testing.T) {
+	type KV struct {
+		Key   string
+		Value string
+	}
+
+	type Record struct {
+		ID      uint64
+		Map     []KV
+		Comment string
+	}
+
+	s := struct {
+		ID  uint64
+		Map []struct {
+			Key   string
+			Value string
+		}
+		Comment string
+	}{
+		ID: 3,
+		Map: []struct {
+			Key   string
+			Value string
+		}{
+			{"k1", "v1"},
+			{"k2", "v2"},
+		},
+		Comment: "Hey",
+	}
+	var d Record
+	if err := Inject(s, &d); err != nil {
+		t.Fatal(err)
+	}
+
+	if d.ID != s.ID {
+		t.Errorf("got %v, want %v", d.ID, s.ID)
+	}
+	if d.Map[0] != s.Map[0] {
+		t.Errorf("got %v, want %v", d.Map[0], s.Map[0])
+	}
+	if d.Map[1] != s.Map[1] {
+		t.Errorf("got %v, want %v", d.Map[1], s.Map[1])
+	}
+	if d.Comment != s.Comment {
+		t.Errorf("got %v, want %v", d.Comment, s.Comment)
+	}
+}
+
+func TestInjectStructUnassignableTypeWithArray(t *testing.T) {
+
+	type KV struct {
+		Key   string
+		Value string
+	}
+
+	type Record struct {
+		ID      uint64
+		Map     [2]KV
+		Comment string
+	}
+
+	s := struct {
+		ID  uint64
+		Map [2]struct {
+			Key   string
+			Value string
+		}
+		Comment string
+	}{
+		ID: 3,
+		Map: [2]struct {
+			Key   string
+			Value string
+		}{
+			{"k1", "v1"},
+			{"k2", "v2"},
+		},
+		Comment: "Hey",
+	}
+	var d Record
+	if err := Inject(s, &d); err != nil {
+		t.Fatal(err)
+	}
+
+	if d.ID != s.ID {
+		t.Errorf("got %v, want %v", d.ID, s.ID)
+	}
+	if d.Map[0] != s.Map[0] {
+		t.Errorf("got %v, want %v", d.Map[0], s.Map[0])
+	}
+	if d.Map[1] != s.Map[1] {
+		t.Errorf("got %v, want %v", d.Map[1], s.Map[1])
+	}
+	if d.Comment != s.Comment {
+		t.Errorf("got %v, want %v", d.Comment, s.Comment)
+	}
+}
+
+func TestInjectStructUnassignableTypeWithStructField(t *testing.T) {
+
+	type KV struct {
+		Key   string
+		Value string
+	}
+
+	type Record struct {
+		ID      uint64
+		Map     KV
+		Comment string
+	}
+
+	s := struct {
+		ID  uint64
+		Map struct {
+			Key   string
+			Value string
+		}
+		Comment string
+	}{
+		ID: 3,
+		Map: struct {
+			Key   string
+			Value string
+		}{"k1", "v1"},
+		Comment: "Hey",
+	}
+	var d Record
+	if err := Inject(s, &d); err != nil {
+		t.Fatal(err)
+	}
+
+	if d.ID != s.ID {
+		t.Errorf("got %v, want %v", d.ID, s.ID)
+	}
+	if d.Map != s.Map {
+		t.Errorf("got %v, want %v", d.Map, s.Map)
+	}
+	if d.Comment != s.Comment {
+		t.Errorf("got %v, want %v", d.Comment, s.Comment)
+	}
+}
+
+func TestInjectStructUnassignableTypeWithMap(t *testing.T) {
+
+	type KV struct {
+		Key   string
+		Value string
+	}
+
+	type Record struct {
+		ID      uint64
+		Map     map[KV]KV
+		Comment string
+	}
+
+	s := struct {
+		ID  uint64
+		Map map[struct {
+			Key   string
+			Value string
+		}]struct {
+			Key   string
+			Value string
+		}
+		Comment string
+	}{
+		ID: 3,
+		Map: map[struct {
+			Key   string
+			Value string
+		}]struct {
+			Key   string
+			Value string
+		}{
+			{"k1", "v1"}: {"k2", "v2"},
+			{"k3", "v3"}: {"k4", "v4"},
+		},
+		Comment: "Hey",
+	}
+	var d Record
+	if err := Inject(s, &d); err != nil {
+		t.Fatal(err)
+	}
+
+	if d.ID != s.ID {
+		t.Errorf("got %v, want %v", d.ID, s.ID)
+	}
+	k1 := KV{"k1", "v1"}
+	if d.Map[k1] != s.Map[k1] {
+		t.Errorf("got %v, want %v", d.Map[k1], s.Map[k1])
+	}
+	k2 := KV{"k3", "v3"}
+	if d.Map[k2] != s.Map[k2] {
+		t.Errorf("got %v, want %v", d.Map[k2], s.Map[k2])
+	}
+	if d.Comment != s.Comment {
+		t.Errorf("got %v, want %v", d.Comment, s.Comment)
+	}
+}
+
 func TestInvalidTypeError(t *testing.T) {
 	s := "test"
 	var d int

@@ -48,6 +48,8 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 		}
 	}()
 
+	origDstValue := dstValue
+	origSrcValue := srcValue
 	dstValue = reflect.Indirect(dstValue)
 	srcValue = reflect.Indirect(reflect.ValueOf(srcValue.Interface()))
 	srcKind := srcValue.Kind()
@@ -73,7 +75,7 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 			return inject(srcValue, dstValue.Index(0), tagKey)
 		}
 		return &InvalidTypeError{
-			TypeSrc: srcValue.Type(),
+			TypeSrc: origSrcValue.Type(),
 			TypeDst: dstType,
 		}
 	case reflect.Map:
@@ -113,7 +115,7 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 			}
 		default:
 			return &InvalidTypeError{
-				TypeSrc: srcValue.Type(),
+				TypeSrc: origSrcValue.Type(),
 				TypeDst: dstType,
 			}
 		}
@@ -148,7 +150,8 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 			}
 		case reflect.Struct:
 			for i := 0; i < dstValue.NumField(); i++ {
-				dstKeyValue := reflect.New(dstValue.Field(i).Type())
+				dstField := dstValue.Field(i)
+				dstKeyValue := reflect.New(dstField.Type())
 				dstFieldType := dstValue.Type().Field(i)
 				fieldName := dstFieldType.Name
 				srcStructValue := srcValue.FieldByName(fieldName)
@@ -160,21 +163,38 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 					}
 					continue
 				}
-				if err := inject(srcStructValue, dstKeyValue, tagKey); err != nil {
+				srcStructValueTyped := srcStructValue
+				if !dstField.Type().AssignableTo(reflect.Indirect(srcStructValueTyped).Type()) {
+					srcStructValueTyped = reflect.New(dstValue.FieldByName(fieldName).Type())
+					if err := inject(srcStructValue, srcStructValueTyped, tagKey); err != nil {
+						return err
+					}
+				}
+				if err := inject(srcStructValueTyped, dstKeyValue, tagKey); err != nil {
 					return err
 				}
-				dstValue.Field(i).Set(reflect.Indirect(srcStructValue))
+				dstField.Set(reflect.Indirect(srcStructValueTyped))
 			}
 		default:
 			return &InvalidTypeError{
-				TypeSrc: srcValue.Type(),
-				TypeDst: dstValue.Type(),
+				TypeSrc: origSrcValue.Type(),
+				TypeDst: origDstValue.Type(),
 			}
 		}
 	case reflect.Array:
 		dstTypeElem := dstValue.Type().Elem()
 		if srcValue.Type().Elem().Kind() == dstTypeElem.Kind() {
-			dstValue.Set(srcValue)
+			srcValueTyped := srcValue
+			if !dstValue.Type().AssignableTo(srcValueTyped.Type()) {
+				srcValueTyped = reflect.Indirect(reflect.New(dstValue.Type()))
+				srcLen := srcValue.Len()
+				for i := 0; i < srcLen; i++ {
+					if err := inject(srcValue.Index(i), srcValueTyped.Index(i), tagKey); err != nil {
+						return err
+					}
+				}
+			}
+			dstValue.Set(srcValueTyped)
 			return
 		}
 		srcLen := srcValue.Len()
@@ -187,8 +207,8 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 	default:
 		if dstKind != srcKind && dstKind != reflect.Interface {
 			return &InvalidTypeError{
-				TypeSrc: srcValue.Type(),
-				TypeDst: dstValue.Type(),
+				TypeSrc: origSrcValue.Type(),
+				TypeDst: origDstValue.Type(),
 			}
 		}
 		dstValue.Set(srcValue)
