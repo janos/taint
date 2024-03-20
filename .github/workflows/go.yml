@@ -12,40 +12,30 @@ jobs:
     steps:
 
     - name: Set up Go
-      uses: actions/setup-go@v1
+      uses: actions/setup-go@v5
       with:
-        go-version: 1.x
-
-    - name: Set up env
-      run: |
-        echo "::set-env name=GOPATH::$(go env GOPATH)"
-        echo "::add-path::$(go env GOPATH)/bin"
-      shell: bash
+        go-version: '1.22'
 
     - name: Checkout
-      uses: actions/checkout@v1
+      uses: actions/checkout@v4
       with:
         fetch-depth: 1
 
     - name: Cache Go modules
-      uses: actions/cache@v1
+      uses: actions/cache@v4
       with:
-        path: ~/go/pkg/mod
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
         key: ${{ runner.os }}-build-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.OS }}-build-${{ env.cache-name }}-
           ${{ runner.OS }}-build-
-          ${{ runner.OS }}-
 
-    - name: Set up GolangCI-Lint
-      run: go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
-      working-directory: ~
-
-    - name: GolangCI-Lint
-      run: golangci-lint run
-
-    - name: Vet
-      run: go vet -v ./...
+    - name: Lint
+      uses: golangci/golangci-lint-action@v4
+      with:
+        version: v1.57.1
+        args: --timeout=10m
 
     - name: Build
       env:
@@ -53,4 +43,4 @@ jobs:
       run: go build -ldflags "-s -w" ./...
 
     - name: Test
-      run: go test -v -race ./...
+      run: go test -v -count=1 -race ./...
