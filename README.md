@@ -1,7 +1,8 @@
 # Taint Go objects
 
-[![GoDoc](https://godoc.org/resenje.org/taint?status.svg)](https://godoc.org/resenje.org/taint)
-[![Go](https://github.com/janos/taint/workflows/Go/badge.svg)](https://github.com/janos/taint/actions?query=workflow%3AGo)
+[![Go](https://github.com/janos/taint/workflows/Go/badge.svg)](https://github.com/janos/taint/actions)
+[![PkgGoDev](https://pkg.go.dev/badge/resenje.org/taint)](https://pkg.go.dev/resenje.org/taint)
+[![NewReleases](https://newreleases.io/badge.svg)](https://newreleases.io/github/janos/taint)
 
 ## Installation
 
