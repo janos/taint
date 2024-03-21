@@ -6,6 +6,7 @@
 package taint
 
 import (
+	"math/big"
 	"reflect"
 	"testing"
 )
@@ -534,6 +535,61 @@ func TestInjectStructUnassignableTypeWithMap(t *testing.T) {
 	}
 	if d.Comment != s.Comment {
 		t.Errorf("got %v, want %v", d.Comment, s.Comment)
+	}
+}
+
+func TestInjectStruct1ToStruct2BtTagName(t *testing.T) {
+	s := struct {
+		SomethingStrange string
+		Hey              string
+		Doit             string `taint:"Do it"`
+		Field4           string `taint:"-"`
+		Field5           string
+	}{
+		SomethingStrange: "test1",
+		Hey:              "test2",
+		Doit:             "test3",
+		Field4:           "test4",
+		Field5:           "test5",
+	}
+	expected := struct {
+		Field1 string `taint:"somethingStrange"`
+		Field2 string `taint:"Hey"`
+		Field3 string `taint:"Do it"`
+		Field4 string `taint:"-"`
+		Field5 string
+	}{
+		Field1: "test1",
+		Field2: "test2",
+		Field3: "",
+		Field4: "",
+		Field5: "test5",
+	}
+
+	var d struct {
+		Field1 string `taint:"somethingStrange"`
+		Field2 string `taint:"Hey"`
+		Field3 string `taint:"Do it"`
+		Field4 string `taint:"-"`
+		Field5 string
+	}
+	if err := Inject(s, &d); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(d, expected) {
+		t.Errorf("%T destination %#v is not set to %#v", d, d, expected)
+	}
+}
+
+func TestInjectPointer(t *testing.T) {
+	s := big.NewInt(42)
+	var d *big.Int
+	expected := big.NewInt(42)
+	if err := Inject(s, &d); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(d, expected) {
+		t.Errorf("%T destination %#v is not set to %#v", d, d, expected)
 	}
 }
 

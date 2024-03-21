@@ -154,14 +154,33 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 				dstKeyValue := reflect.New(dstField.Type())
 				dstFieldType := dstValue.Type().Field(i)
 				fieldName := dstFieldType.Name
+				tagName := keyNameFromTag(dstFieldType.Tag, tagKey)
+				if tagName == "-" {
+					continue
+				}
 				srcStructValue := srcValue.FieldByName(fieldName)
 				if !srcStructValue.IsValid() {
-					if tagContains(dstFieldType.Tag, tagKey, "required") {
-						return &FieldRequiredError{
-							FieldName: fieldName,
+					if tagName != "" {
+						fieldName = tagName
+					}
+					for i := 0; i < dstValue.NumField(); i++ {
+						srcStructValue = srcValue.FieldByName(fieldName)
+						if srcStructValue.IsValid() {
+							break
+						}
+						srcStructValue = srcValue.FieldByName(strings.ToUpper(fieldName[:1]) + fieldName[1:])
+						if srcStructValue.IsValid() {
+							break
 						}
 					}
-					continue
+					if !srcStructValue.IsValid() {
+						if tagContains(dstFieldType.Tag, tagKey, "required") {
+							return &FieldRequiredError{
+								FieldName: fieldName,
+							}
+						}
+						continue
+					}
 				}
 				srcStructValueTyped := srcStructValue
 				if !dstField.Type().AssignableTo(reflect.Indirect(srcStructValueTyped).Type()) {
@@ -205,6 +224,10 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 			}
 		}
 	default:
+		if srcValue.CanAddr() && dstKind == srcValue.Addr().Kind() {
+			srcValue = srcValue.Addr()
+			srcKind = srcValue.Kind()
+		}
 		if dstKind != srcKind && dstKind != reflect.Interface {
 			return &InvalidTypeError{
 				TypeSrc: origSrcValue.Type(),
