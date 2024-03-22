@@ -48,8 +48,6 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 		}
 	}()
 
-	origDstValue := dstValue
-	origSrcValue := srcValue
 	dstValue = reflect.Indirect(dstValue)
 	srcValue = reflect.Indirect(reflect.ValueOf(srcValue.Interface()))
 	srcKind := srcValue.Kind()
@@ -75,7 +73,7 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 			return inject(srcValue, dstValue.Index(0), tagKey)
 		}
 		return &InvalidTypeError{
-			TypeSrc: origSrcValue.Type(),
+			TypeSrc: srcValue.Type(),
 			TypeDst: dstType,
 		}
 	case reflect.Map:
@@ -115,7 +113,7 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 			}
 		default:
 			return &InvalidTypeError{
-				TypeSrc: origSrcValue.Type(),
+				TypeSrc: srcValue.Type(),
 				TypeDst: dstType,
 			}
 		}
@@ -163,15 +161,9 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 					if tagName != "" {
 						fieldName = tagName
 					}
-					for i := 0; i < dstValue.NumField(); i++ {
-						srcStructValue = srcValue.FieldByName(fieldName)
-						if srcStructValue.IsValid() {
-							break
-						}
+					srcStructValue = srcValue.FieldByName(fieldName)
+					if !srcStructValue.IsValid() {
 						srcStructValue = srcValue.FieldByName(strings.ToUpper(fieldName[:1]) + fieldName[1:])
-						if srcStructValue.IsValid() {
-							break
-						}
 					}
 					if !srcStructValue.IsValid() {
 						if tagContains(dstFieldType.Tag, tagKey, "required") {
@@ -183,21 +175,32 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 					}
 				}
 				srcStructValueTyped := srcStructValue
+				if srcStructValueTyped.CanAddr() && dstField.Kind() == srcStructValueTyped.Addr().Kind() {
+					srcStructValueTyped = srcStructValueTyped.Addr()
+					srcStructValue = srcStructValue.Addr()
+				}
 				if !dstField.Type().AssignableTo(reflect.Indirect(srcStructValueTyped).Type()) {
-					srcStructValueTyped = reflect.New(dstValue.FieldByName(fieldName).Type())
-					if err := inject(srcStructValue, srcStructValueTyped, tagKey); err != nil {
-						return err
+					fieldValue := dstValue.FieldByName(fieldName)
+					if fieldValue.IsValid() {
+						srcStructValueTyped = reflect.New(fieldValue.Type())
+						if err := inject(srcStructValue, srcStructValueTyped, tagKey); err != nil {
+							return err
+						}
 					}
 				}
 				if err := inject(srcStructValueTyped, dstKeyValue, tagKey); err != nil {
 					return err
 				}
-				dstField.Set(reflect.Indirect(srcStructValueTyped))
+				if srcStructValueTyped.Type().AssignableTo(dstField.Type()) {
+					dstField.Set(srcStructValueTyped)
+				} else {
+					dstField.Set(reflect.Indirect(srcStructValueTyped))
+				}
 			}
 		default:
 			return &InvalidTypeError{
-				TypeSrc: origSrcValue.Type(),
-				TypeDst: origDstValue.Type(),
+				TypeSrc: srcValue.Type(),
+				TypeDst: dstValue.Type(),
 			}
 		}
 	case reflect.Array:
@@ -230,11 +233,15 @@ func inject(srcValue, dstValue reflect.Value, tagKey string) (err error) {
 		}
 		if dstKind != srcKind && dstKind != reflect.Interface {
 			return &InvalidTypeError{
-				TypeSrc: origSrcValue.Type(),
-				TypeDst: origDstValue.Type(),
+				TypeSrc: srcValue.Type(),
+				TypeDst: dstValue.Type(),
 			}
 		}
-		dstValue.Set(srcValue)
+		if srcValue.Type().AssignableTo(dstValue.Type()) {
+			dstValue.Set(srcValue)
+		} else {
+			dstValue.Set(reflect.Indirect(srcValue))
+		}
 	}
 	return nil
 }
